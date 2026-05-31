@@ -57,40 +57,69 @@ export default function LoginPage() {
     }
   };
 
-  const handleOAuthLogin = (provider: "google" | "github") => {
+  const handleOAuthLogin = async (provider: "google" | "github") => {
     const redirectUri = `${window.location.origin}/api/auth/callback`;
     const state = provider;
     
-    // Open OAuth window
-    const oauthWindow = window.open(
-      `/api/auth/${provider}?redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`,
-      `${provider}-login`,
-      "width=500,height=600"
-    );
+    try {
+      // Step 1: Get the OAuth authorization URL from our backend
+      const response = await fetch(
+        `/api/auth/${provider}?redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`
+      );
 
-    // Listen for message from OAuth callback
-    const handleMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-      
-      if (event.data.type === "oauth-success") {
-        localStorage.setItem("currentUser", JSON.stringify(event.data.user));
-        
-        // Propagate credential sync
-        const credEvent = new Event("credentialsUpdated");
-        window.dispatchEvent(credEvent);
-        
-        if (oauthWindow) oauthWindow.close();
-        router.push("/");
-      } else if (event.data.type === "oauth-error") {
-        setError(event.data.message || `${provider} سے لاگ ان میں خرابی`);
-        if (oauthWindow) oauthWindow.close();
+      if (!response.ok) {
+        const error = await response.json();
+        setError(error.error || `${provider} سے OAuth کنفیگریشن میں خرابی`);
+        return;
       }
-    };
 
-    window.addEventListener("message", handleMessage);
-    
-    // Cleanup listener
-    return () => window.removeEventListener("message", handleMessage);
+      const data = await response.json();
+      const authUrl = data.url;
+
+      if (!authUrl) {
+        setError(`${provider} سے authorization URL نہیں ملا`);
+        return;
+      }
+
+      // Step 2: Open popup window
+      const oauthWindow = window.open(
+        authUrl,
+        `${provider}-login`,
+        "width=500,height=600"
+      );
+
+      if (!oauthWindow) {
+        setError("Popup window کھول نہیں سکے۔ براہ کرم اپنے browser کی popup settings چیک کریں");
+        return;
+      }
+
+      // Step 3: Listen for message from OAuth callback
+      const handleMessage = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
+        
+        if (event.data.type === "oauth-success") {
+          localStorage.setItem("currentUser", JSON.stringify(event.data.user));
+          
+          // Propagate credential sync
+          const credEvent = new Event("credentialsUpdated");
+          window.dispatchEvent(credEvent);
+          
+          if (oauthWindow) oauthWindow.close();
+          router.push("/");
+        } else if (event.data.type === "oauth-error") {
+          setError(event.data.message || `${provider} سے لاگ ان میں خرابی`);
+          if (oauthWindow) oauthWindow.close();
+        }
+      };
+
+      window.addEventListener("message", handleMessage);
+      
+      // Cleanup listener
+      return () => window.removeEventListener("message", handleMessage);
+    } catch (err) {
+      console.log("[v0] OAuth error:", err);
+      setError(`${provider} OAuth میں خرابی: براہ کرم دوبارہ کوشش کریں`);
+    }
   };
 
   return (
