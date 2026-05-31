@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
-  const clientRedirect = searchParams.get("redirect_uri");
+  let redirectUri = searchParams.get("redirect_uri");
 
   const githubClientId = process.env.GITHUB_CLIENT_ID || (req.headers.get("x-github-client-id") || "");
 
@@ -13,9 +13,15 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // If redirect_uri not provided, use current origin
+  if (!redirectUri) {
+    const origin = req.headers.get("origin") || `${req.nextUrl.protocol}//${req.nextUrl.host}`;
+    redirectUri = `${origin}/api/auth/callback`;
+  }
+
   const queryParams = new URLSearchParams({
     client_id: githubClientId,
-    redirect_uri: clientRedirect || "",
+    redirect_uri: redirectUri,
     scope: "read:user user:email",
   });
 
