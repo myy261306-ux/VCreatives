@@ -7,55 +7,64 @@ export async function POST(req: NextRequest) {
 
     if (!fullName || !username || !email || !password) {
       return NextResponse.json(
-        { error: "All profile fields are mandatory." },
+        { message: "تمام معلومات ضروری ہیں۔" },
         { status: 400 }
       );
     }
 
     const db = await getMongoDb();
-    if (!db) {
-      return NextResponse.json({ 
-        useFallback: true, 
-        message: "No server-side MongoDB connection detected. Running in client mode." 
+    
+    // Try database first
+    if (db) {
+      const usersCollection = db.collection("users");
+      
+      // Check if user already exists
+      const existingUser = await usersCollection.findOne({ email: email.toLowerCase() });
+      if (existingUser) {
+        return NextResponse.json(
+          { message: "یہ ای میل پہلے سے رجسٹرڈ ہے! براہ کرم لاگ ان کریں۔" },
+          { status: 409 }
+        );
+      }
+
+      const newUser = {
+        fullName,
+        username,
+        email: email.toLowerCase(),
+        password,
+        authMethod: "Email Registry (Atlas Core Connected)",
+        createdAt: new Date().toISOString()
+      };
+
+      await usersCollection.insertOne(newUser);
+
+      return NextResponse.json({
+        success: true,
+        user: {
+          fullName: newUser.fullName,
+          username: newUser.username,
+          email: newUser.email,
+          authMethod: newUser.authMethod
+        }
+      });
+    } else {
+      // Fallback: return success and let client handle storage
+      // This is for development without MongoDB
+      return NextResponse.json({
+        success: true,
+        user: {
+          fullName,
+          username,
+          email: email.toLowerCase(),
+          authMethod: "Email Registry (Local Storage)"
+        }
       });
     }
-
-    const usersCollection = db.collection("users");
-    
-    // Check if user already exists
-    const existingUser = await usersCollection.findOne({ email: email.toLowerCase() });
-    if (existingUser) {
-      return NextResponse.json(
-        { error: "Is email address par already aik account registered hai! Meherbani karke login karein." },
-        { status: 409 }
-      );
-    }
-
-    const newUser = {
-      fullName,
-      username,
-      email: email.toLowerCase(),
-      password, // Note: In production use Bcrypt/Argon2. We store as-is for high-fidelity sync.
-      authMethod: "Email Registry (Atlas Core Connected)",
-      createdAt: new Date().toISOString()
-    };
-
-    await usersCollection.insertOne(newUser);
-
-    return NextResponse.json({
-      success: true,
-      user: {
-        fullName: newUser.fullName,
-        username: newUser.username,
-        email: newUser.email,
-        authMethod: newUser.authMethod
-      }
-    });
 
   } catch (err: any) {
     console.error("Server Signup Exception:", err);
     return NextResponse.json(
-      { error: `Database Registration Error: ${err.message || err}` },
+      { message: `ڈیٹا بیس رجسٹریشن میں خرابی: ${err.message || err}` },
       { status: 500 }
     );
   }

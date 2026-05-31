@@ -2,40 +2,47 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Shield, Sparkles, ArrowRight, ArrowLeft } from "lucide-react";
+import { Shield, ArrowRight, ArrowLeft } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function LoginPage() {
   const router = useRouter();
   
-  // Form states with nice professional defaults for testing
-  const [email, setEmail] = useState<string>("lariabali13@gmail.com");
-  const [password, setPassword] = useState<string>("••••••••");
+  // Form states
+  const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
-      setError("Please fill out all credentials parameters.");
+      setError("براہ کرم تمام اعتبارات درج کریں");
       return;
     }
 
     setLoading(true);
     setError("");
 
-    setTimeout(() => {
-      const userObj = {
-        username: email.split("@")[0] || "lariab",
-        fullName: email === "lariabali13@gmail.com" ? "Lariab Ali" : "Developer Sandbox",
-        email: email
-      };
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
-      localStorage.setItem("currentUser", JSON.stringify(userObj));
-      
-      if (email === "lariabali13@gmail.com") {
-        localStorage.setItem("vC_mongo_uri", "mongodb+srv://bilalbhai123ws:cluster0");
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.message || "لاگ ان میں خرابی ہوئی");
+        setLoading(false);
+        return;
       }
+
+      // Save user to localStorage
+      localStorage.setItem("currentUser", JSON.stringify(data.user));
 
       // Propagate credential sync
       const event = new Event("credentialsUpdated");
@@ -43,13 +50,47 @@ export default function LoginPage() {
 
       setLoading(false);
       router.push("/");
-    }, 1000);
+    } catch (err) {
+      console.log("[v0] Login error:", err);
+      setError("براہ کرم دوبارہ کوشش کریں");
+      setLoading(false);
+    }
   };
 
-  const autofillTestUser = () => {
-    setEmail("lariabali13@gmail.com");
-    setPassword("demo2026");
-    setError("");
+  const handleOAuthLogin = (provider: "google" | "github") => {
+    const redirectUri = `${window.location.origin}/api/auth/callback`;
+    const state = provider;
+    
+    // Open OAuth window
+    const oauthWindow = window.open(
+      `/api/auth/${provider}?redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`,
+      `${provider}-login`,
+      "width=500,height=600"
+    );
+
+    // Listen for message from OAuth callback
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      
+      if (event.data.type === "oauth-success") {
+        localStorage.setItem("currentUser", JSON.stringify(event.data.user));
+        
+        // Propagate credential sync
+        const credEvent = new Event("credentialsUpdated");
+        window.dispatchEvent(credEvent);
+        
+        if (oauthWindow) oauthWindow.close();
+        router.push("/");
+      } else if (event.data.type === "oauth-error") {
+        setError(event.data.message || `${provider} سے لاگ ان میں خرابی`);
+        if (oauthWindow) oauthWindow.close();
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    
+    // Cleanup listener
+    return () => window.removeEventListener("message", handleMessage);
   };
 
   return (
@@ -127,9 +168,9 @@ export default function LoginPage() {
           <div className="grid grid-cols-2 gap-3" id="social-sign-ins">
             <button
               type="button"
-              onClick={autofillTestUser}
+              onClick={() => handleOAuthLogin("google")}
               className="flex items-center justify-center gap-2 bg-slate-900/80 hover:bg-slate-900 border border-slate-800 text-white font-semibold py-2 px-3 rounded-xl cursor-pointer text-xs transition-colors hover:border-amber-500/30"
-              title="Demo Sign-In with Google credentials"
+              title="Google کے ساتھ سائن ان کریں"
             >
               {/* Google vector icon */}
               <svg className="w-4 h-4 text-amber-400 fill-current" viewBox="0 0 24 24">
@@ -139,9 +180,9 @@ export default function LoginPage() {
             </button>
             <button
               type="button"
-              onClick={autofillTestUser}
+              onClick={() => handleOAuthLogin("github")}
               className="flex items-center justify-center gap-2 bg-slate-900/80 hover:bg-slate-900 border border-slate-800 text-white font-semibold py-2 px-3 rounded-xl cursor-pointer text-xs transition-colors hover:border-violet-500/30"
-              title="Demo Sign-In with GitHub credentials"
+              title="GitHub کے ساتھ سائن ان کریں"
             >
               {/* GitHub vector icon */}
               <svg className="w-4 h-4 text-violet-400 fill-current" viewBox="0 0 24 24">
@@ -169,7 +210,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="lariabali13@gmail.com"
+                placeholder="اپنی ای میل درج کریں"
                 className="w-full bg-[#04060d] border border-slate-900 hover:border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-700 focus:outline-none focus:border-amber-400/40 focus:ring-1 focus:ring-amber-400/20"
               />
             </div>
@@ -205,16 +246,11 @@ export default function LoginPage() {
 
           </form>
 
-          {/* 1-Click Autofill credential button for frictionless debugging */}
+          {/* Credentials hint */}
           <div className="border-t border-slate-900/60 pt-4 text-center">
-            <button
-              type="button"
-              onClick={autofillTestUser}
-              className="inline-flex items-center gap-1.5 text-[10px] font-mono text-amber-400 hover:text-amber-300 transition-colors"
-            >
-              <Sparkles className="w-3 h-3" />
-              <span>Autofill test credentials (&quot;lariabali13@gmail.com&quot;)</span>
-            </button>
+            <p className="text-[10px] font-mono text-slate-500">
+              ٹیسٹ کے لیے: lariabali13@gmail.com / demo2026
+            </p>
           </div>
 
           <div className="text-center">

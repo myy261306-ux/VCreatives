@@ -230,7 +230,7 @@ export async function GET(req: NextRequest) {
               
               if (window.opener) {
                 // Return verified user object back to login tab view
-                window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS', user: userObj }, '*');
+                window.opener.postMessage({ type: 'oauth-success', user: userObj }, '*');
                 setTimeout(() => {
                   window.close();
                 }, 1000);

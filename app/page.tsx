@@ -106,6 +106,13 @@ export default function HomePage() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const storedUser = localStorage.getItem("currentUser");
+      
+      // Check if user is authenticated, if not redirect to login
+      if (!storedUser) {
+        setActiveModal("auth-alert");
+        return;
+      }
+
       const savedMongo = localStorage.getItem("vC_mongo_uri");
       const savedTheme = localStorage.getItem("vC_theme") as "dark" | "light" | "white" | null;
       
@@ -126,6 +133,8 @@ export default function HomePage() {
           parsedUser = JSON.parse(storedUser);
         } catch {
           localStorage.removeItem("currentUser");
+          setActiveModal("auth-alert");
+          return;
         }
       }
 

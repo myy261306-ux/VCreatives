@@ -7,51 +7,53 @@ export async function POST(req: NextRequest) {
 
     if (!email || !password) {
       return NextResponse.json(
-        { error: "Email and password are required fields" },
+        { message: "ای میل اور پاس ورڈ ضروری ہیں" },
         { status: 400 }
       );
     }
 
     const db = await getMongoDb();
-    if (!db) {
-      // Fallback response indicating database is not yet hooked up on server
-      return NextResponse.json({ 
-        useFallback: true, 
-        message: "No server-side MongoDB connection detected. Running in client mode." 
+    
+    // Try database first
+    if (db) {
+      const usersCollection = db.collection("users");
+      const user = await usersCollection.findOne({ email: email.toLowerCase() });
+
+      if (!user) {
+        return NextResponse.json(
+          { message: "یہ ای میل ڈیٹا بیس میں موجود نہیں ہے!" },
+          { status: 404 }
+        );
+      }
+
+      if (user.password !== password) {
+        return NextResponse.json(
+          { message: "غلط پاس ورڈ! براہ کرم اپنا پاس ورڈ دوبارہ درج کریں۔" },
+          { status: 401 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        user: {
+          fullName: user.fullName || "User",
+          username: user.username || "user",
+          email: user.email,
+          authMethod: user.authMethod || "Email Verification (Atlas Core Connected)"
+        }
       });
-    }
-
-    const usersCollection = db.collection("users");
-    const user = await usersCollection.findOne({ email: email.toLowerCase() });
-
-    if (!user) {
+    } else {
+      // Fallback: return error for development (user must signup first)
       return NextResponse.json(
-        { error: "Is email address ka koi user database mein nahi mila!" },
-        { status: 404 }
-      );
-    }
-
-    if (user.password !== password) {
-      return NextResponse.json(
-        { error: "Ghalat password! Meherbani karke apna password sahi se enter karein." },
+        { message: "لاگ ان کے لیے پہلے سائن اپ کریں" },
         { status: 401 }
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      user: {
-        fullName: user.fullName || "User",
-        username: user.username || "user",
-        email: user.email,
-        authMethod: user.authMethod || "Email Verification (Atlas Core Connected)"
-      }
-    });
-
   } catch (err: any) {
     console.error("Server Login Exception:", err);
     return NextResponse.json(
-      { error: `Database Authentication Error: ${err.message || err}` },
+      { message: `ڈیٹا بیس تصدیق میں خرابی: ${err.message || err}` },
       { status: 500 }
     );
   }
